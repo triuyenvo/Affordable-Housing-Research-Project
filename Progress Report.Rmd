@@ -1,0 +1,166 @@
+---
+title: "Technical Report"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-03-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+install.packages("googlesheets4")
+install.packages("tidyverse")
+install.packages("dplyr")
+install.packages("readxl")
+install.packages("scales")
+
+library(googlesheets4)
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(scales)
+gs4_deauth()
+
+# Rental price data sets based on the number of bedrooms in 2019 and 2022
+num_bedroom2019 <- read_sheet("https://docs.google.com/spreadsheets/d/1qr7D0uh-vgcUC7wEDob1SLuinNhc6oTqByIvPYNsAlc/edit#gid=0")
+num_bedroom2022 <- read_sheet("https://docs.google.com/spreadsheets/d/1UrlAItrmmCKWqBLryqP_qa5ucPJ2P5HO6MdRU8U6l6Y/edit#gid=0")
+
+
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+# T-test to show the relationship between the rental price in 2019 and 2022 for one bedroom
+t.test(num_bedroom2019$`One-Bedroom`, num_bedroom2022$`One-Bedroom`, na.rm=TRUE)
+# T-test to show the relationship between the rental price in 2019 and 2022 for two bedrooms
+t.test(num_bedroom2019$`Two-Bedroom`, num_bedroom2022$`Two-Bedroom`, na.rm=TRUE)
+# T-test to show the relationship between the rental price in 2019 and 2022 for three bedrooms
+t.test(num_bedroom2019$`Three-Bedroom`, num_bedroom2022$`Three-Bedroom`, na.rm=TRUE)
+# T-test to show the relationship between the rental price in 2019 and 2022 for four bedrooms
+t.test(num_bedroom2019$`Four-Bedroom`, num_bedroom2022$`Four-Bedroom`, na.rm=TRUE)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+combine_bedroom_2019 <- num_bedroom2019 %>%
+  gather(key = "bedrooms", value = "response", `One-Bedroom`,`Two-Bedroom`,`Three-Bedroom`,`Four-Bedroom`)
+
+combine_bedroom_2022 <- num_bedroom2022 %>%
+  gather(key = "bedrooms", value = "response", `One-Bedroom`,`Two-Bedroom`,`Three-Bedroom`,`Four-Bedroom`)
+
+# Anova test for the rental price in 2019 and 2022 based on number of bedrooms
+anova_2019 <- aov(response ~ bedrooms, data = combine_bedroom_2019)
+summary(anova_2019)
+
+anova_2022 <- aov(response ~ bedrooms, data = combine_bedroom_2022)
+summary(anova_2022)
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+# Read in the data
+crime_data <- read_excel("/Users/dangminh0912/Desktop/ohio.xls")
+
+# Read column names from row 6
+column_names <- read_excel("/Users/dangminh0912/Desktop/ohio.xls", range = cell_rows(6), col_names = FALSE)
+column_names <- as.character(unlist(column_names))
+
+# Read the data, starting from row 7
+crime_data <- read_excel("/Users/dangminh0912/Desktop/ohio.xls", skip = 6, col_names = column_names)
+
+# Replace newline characters with spaces in column names
+colnames(crime_data) <- gsub("\n", " ", colnames(crime_data))
+
+# Clean up column names
+crime_data <- crime_data %>% 
+  rename(
+    "MetropolitanNonmetropolitan" = "Metropolitan/Nonmetropolitan",
+    "Murder" = "Murder and nonnegligent manslaughter",
+    "Rape" = "Rape1",
+    "AggravatedAssault" = "Aggravated assault",
+    "PropertyCrime" = "Property crime",
+    "LarcenyTheft" = "Larceny- theft",
+    "MotorVehicleTheft" = "Motor vehicle theft",
+    "Violent crime" = "Violent crime"
+    
+  )
+
+scale_y_continuous(labels = scales::comma)
+
+# Filter out NA values
+crime_data <- crime_data %>%
+  filter(!is.na(`Violent crime`) & !is.na(`PropertyCrime`))
+
+# Modified ggplot code
+# Update County Category variable
+crime_data <- crime_data %>%
+  mutate(TotalCrimes = `Violent crime` + `PropertyCrime`,
+         CountyCategory = case_when(
+           County == "Licking" ~ "Licking",
+           TRUE ~ "Other"
+         ))
+
+
+
+# Create a custom color palette
+custom_palette <- c("Licking" = "#FF5733", "Other" = "gray")
+
+
+# Create the ggplot graph
+p <- ggplot(crime_data, aes(x = reorder(County, TotalCrimes))) +
+  geom_bar(aes(y = `Violent crime`, fill = "Violent Crime"), stat = "identity", color = ifelse(crime_data$County == "Licking", "blue", NA)) +
+  geom_bar(aes(y = `PropertyCrime`, fill = "Property Crime"), stat = "identity", alpha = 0.6, color = ifelse(crime_data$County == "Licking", "blue", NA)) +
+  geom_text(data = filter(crime_data, County == "Licking"),
+            aes(y = `Violent crime`, label = `Violent crime`), vjust = -0.5) +
+  geom_text(data = filter(crime_data, County == "Licking"),
+            aes(y = `PropertyCrime`, label = `PropertyCrime`), vjust = -0.5) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+  labs(title = "Violent Crimes vs. Property Crimes by County",
+       x = "County",
+       y = "Incident Count") +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_manual(values = c("Violent Crime" = "red", "Property Crime" = "grey")) +
+  guides(fill = guide_legend(title = "Crime Type", labels = c("Violent Crime", "Property Crime")))
+
+# Increase the size of the plot
+options(repr.plot.width = 12, repr.plot.height = 6)
+
+# Print the plot
+print(p)
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+
+#Visual depiction
+ggplot(crime_data, aes(x = `PropertyCrime`, y = `Violent crime`, color = County)) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  labs(title = "Relationship between Violent Crimes and Property Crimes by County",
+       x = "Property Crimes",
+       y = "Violent Crimes") +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma)
+
+# Add a column to identify Licking County
+crime_data <- crime_data %>%
+  mutate(is_licking = ifelse(County == "Licking", "Licking County", "Other"))
+
+# Plot the graph with the updated color condition
+ggplot(crime_data, aes(x = `PropertyCrime`, y = `Violent crime`, color = is_licking)) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  labs(title = "Relationship between Violent Crimes and Property Crimes by County",
+       x = "Property Crimes",
+       y = "Violent Crimes") +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_color_manual(values = c("Licking County" = "blue", "Other" = "gray"))
+
+```
+
